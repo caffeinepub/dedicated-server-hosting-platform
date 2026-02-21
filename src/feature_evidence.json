@@ -1,0 +1,27 @@
+{
+  "kind": "feature_evidence_report",
+  "features": [
+    {
+      "featureId": "feature-fix-the-infinite-loop-occurring-in-adminsetupnotice-component-where-the-an-admin-already-exists-error-continuously-refreshes-the-page-preventing-users-from-accessing-the-application",
+      "featureTitle": "Fix the infinite loop occurring in AdminSetupNotice component where the 'An admin already exists' error continuously refreshes the page, preventing users from accessing the application",
+      "files": [
+        "frontend/src/components/AdminSetupNotice.tsx",
+        "frontend/src/hooks/useQueries.ts"
+      ],
+      "components": [
+        "authorization@4.0.0",
+        "stripe@3.0.0",
+        "http-outcalls@3.0.0",
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-1"
+      ],
+      "confidence": "high"
+    }
+  ]
+}

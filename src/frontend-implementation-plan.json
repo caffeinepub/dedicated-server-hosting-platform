@@ -1,0 +1,29 @@
+{
+  "kind": "implementation_plan",
+  "version": "1.0",
+  "title": "Fix infinite loop in admin setup error handling",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "summary": "Fix the infinite loop in AdminSetupNotice component where 'An admin already exists' error continuously refreshes the page",
+      "acceptanceCriteria": [
+        "The admin setup error no longer triggers an automatic page refresh loop",
+        "Users can see the error message without the page continuously reloading",
+        "The application remains accessible even when admin setup encounters an error",
+        "Error state is handled gracefully with a manual retry option instead of automatic refresh"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/AdminSetupNotice.tsx",
+          "operation": "modify",
+          "description": "Remove automatic page refresh on error and replace with a manual retry mechanism. Update error handling to display the error message without triggering window.location.reload(). Add a 'Retry' button that allows users to manually retry admin setup instead of forcing an automatic refresh. Ensure error states are properly tracked to prevent re-triggering the admin setup mutation when the component re-renders."
+        },
+        {
+          "path": "frontend/src/hooks/useQueries.ts",
+          "operation": "modify",
+          "description": "Review the useAutoAssignAdmin and related admin setup hooks to ensure they don't automatically retry on failure. Add proper error handling configuration (retry: false) for admin setup mutations to prevent automatic retries that could contribute to the loop. Verify that the query invalidation logic doesn't trigger unnecessary refetches after errors."
+        }
+      ]
+    }
+  ]
+}

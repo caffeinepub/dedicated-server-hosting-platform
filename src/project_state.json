@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectStateVersion": 3,
+  "summary": "New project",
+  "architectural_notes": [],
+  "known_issues": [
+    "Login process causing infinite loop after Version 18 deployment"
+  ],
+  "isFixRequest": true,
+  "existing_features": [
+    {
+      "id": "feature-fix-the-infinite-loop-occurring-in-adminsetupnotice-component-where-the-an-admin-already-exists-error-continuously-refreshes-the-page-preventing-users-from-accessing-the-application",
+      "title": "Fix the infinite loop occurring in AdminSetupNotice component where the 'An admin already exists' error continuously refreshes the page, preventing users from accessing the application",
+      "reqIds": [
+        "REQ-1"
+      ],
+      "version": 1
+    }
+  ],
+  "new_feature_requests": [
+    {
+      "id": "AR-2",
+      "summary": "Investigate and resolve the root cause of the 'An admin already exists' error being thrown incorrectly when no admin is actually assigned in the backend",
+      "reqIds": [
+        "REQ-2"
+      ],
+      "status": "pending"
+    }
+  ],
+  "projectName": "ServerHost",
+  "clarification_mode": "instant",
+  "clarification_rounds": 0
+}

@@ -1,2 +1,3 @@
-# dedicated-server-hosting-platform
-Exported from Caffeine project: Auto-assign first authenticated user as admin and fix failing admin initialization
+## 
+
+To run app build and run docker image: `docker build -t app . docker run -it --network host app`

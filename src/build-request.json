@@ -1,0 +1,57 @@
+{
+  "kind": "build_request",
+  "title": "Fix infinite loop in admin setup error handling",
+  "projectName": "ServerHost",
+  "priority": "high",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "Fix the infinite loop occurring in AdminSetupNotice component where the 'An admin already exists' error continuously refreshes the page, preventing users from accessing the application",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-latest"
+        ],
+        "quotes": [
+          "It's also looping"
+        ]
+      },
+      "acceptanceCriteria": [
+        "The admin setup error no longer triggers an automatic page refresh loop",
+        "Users can see the error message without the page continuously reloading",
+        "The application remains accessible even when admin setup encounters an error",
+        "Error state is handled gracefully with a manual retry option instead of automatic refresh"
+      ]
+    },
+    {
+      "id": "REQ-2",
+      "text": "Investigate and resolve the root cause of the 'An admin already exists' error being thrown incorrectly when no admin is actually assigned in the backend",
+      "target": "backend",
+      "source": {
+        "messageIds": [
+          "msg-latest"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Backend correctly identifies when no admin exists in the system",
+        "Admin assignment succeeds for the first authenticated user on fresh deployments",
+        "The hasAdminBeenAssigned flag accurately reflects the actual admin assignment state",
+        "No false positive 'admin already exists' errors occur during initial setup"
+      ]
+    }
+  ],
+  "constraints": [
+    "Must preserve existing AdminSetupNotice component structure and user experience",
+    "Cannot break existing admin role verification logic",
+    "Must maintain compatibility with Internet Identity authentication flow"
+  ],
+  "nonGoals": [
+    "Redesigning the admin setup UI beyond fixing the loop",
+    "Adding multi-admin support or admin management features",
+    "Modifying the overall authentication system"
+  ],
+  "imageRequirements": {
+    "required": [],
+    "edits": []
+  }
+}
