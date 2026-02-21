@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useActor } from './useActor';
-import type { ServerPlan, UserProfile, ShoppingCart, Order, Invoice, UpdatePlanInput, StripeConfiguration, CheckResult, UserRole, CustomServerConfig } from '../backend';
+import type { ServerPlan, UserProfile, ShoppingCart, Order, Invoice, UpdatePlanInput, StripeConfiguration, CheckResult, UserRole, CustomServerConfig, DedicatedServer } from '../backend';
+import { Principal } from '@dfinity/principal';
 
 // Server Plans
 export function useGetServerPlans() {
@@ -73,9 +74,10 @@ export function useUpdateServerPlan() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (update: UpdatePlanInput) => {
+    mutationFn: async (params: { id: string } & Omit<UpdatePlanInput, 'id'>) => {
       if (!actor) throw new Error('Actor not available');
-      return actor.updateServerPlan(update);
+      const { id, ...update } = params;
+      return actor.updateServerPlan(id, update);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['serverPlans'] });
@@ -213,6 +215,28 @@ export function useClearCart() {
 }
 
 // Checkout
+// ============================================================================
+// STRIPE PUBLISHABLE KEY CONFIGURATION (Frontend)
+// ============================================================================
+// 
+// NOTE: The current implementation uses server-side Stripe checkout sessions,
+// so the Stripe Publishable Key is NOT required in the frontend at this time.
+// 
+// If you plan to add Stripe Elements (card input forms) in the future, you will
+// need to initialize Stripe on the frontend with your Publishable Key:
+//
+// Example format: "pk_test_51ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890"
+//
+// To add frontend Stripe initialization:
+// 1. Install @stripe/stripe-js: npm install @stripe/stripe-js
+// 2. Create a Stripe instance:
+//    import { loadStripe } from '@stripe/stripe-js';
+//    const stripePromise = loadStripe('pk_test_YOUR_PUBLISHABLE_KEY_HERE');
+// 3. Use Stripe Elements for custom payment forms
+//
+// For detailed setup instructions, see: STRIPE_SETUP.md (in the project root)
+// ============================================================================
+
 export function useCheckout() {
   const { actor } = useActor();
 
@@ -221,6 +245,9 @@ export function useCheckout() {
       if (!actor) throw new Error('Actor not available');
       const result = await actor.checkout(successUrl, cancelUrl);
       const session = JSON.parse(result) as { id: string; url: string };
+      if (!session?.url) {
+        throw new Error('Stripe session missing url');
+      }
       return session;
     },
   });
@@ -454,6 +481,143 @@ export function useSeedDefaultPlans() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['serverPlans'] });
+    },
+  });
+}
+
+// Admin Invitation System
+export function useCreateAdminInvitation() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.createAdminInvitation();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['activeInvitations'] });
+    },
+  });
+}
+
+export function useGetActiveInvitations() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<Array<[string, Principal]>>({
+    queryKey: ['activeInvitations'],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getActiveInvitations();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useRedeemAdminInvitation() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (code: string) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.redeemAdminInvitation(code);
+    },
+    onSuccess: async () => {
+      // Invalidate admin status and role queries after successful redemption
+      await queryClient.invalidateQueries({ queryKey: ['adminStatus'] });
+      await queryClient.invalidateQueries({ queryKey: ['isCallerAdmin'] });
+      await queryClient.invalidateQueries({ queryKey: ['currentUserProfile'] });
+      
+      // Force refetch to ensure immediate state update
+      await queryClient.refetchQueries({ queryKey: ['adminStatus'] });
+      await queryClient.refetchQueries({ queryKey: ['isCallerAdmin'] });
+    },
+  });
+}
+
+// Dedicated Server Management
+export function useGetAllDedicatedServers() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<DedicatedServer[]>({
+    queryKey: ['dedicatedServers'],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllDedicatedServers();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useCreateDedicatedServer() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: {
+      id: string;
+      name: string;
+      cpuCores: bigint;
+      ramGb: bigint;
+      storageGb: bigint;
+    }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.createDedicatedServer(
+        params.id,
+        params.name,
+        params.cpuCores,
+        params.ramGb,
+        params.storageGb
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dedicatedServers'] });
+    },
+  });
+}
+
+export function useDeleteDedicatedServer() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (serverId: string) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.deleteDedicatedServer(serverId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dedicatedServers'] });
+    },
+  });
+}
+
+export function useAssignServerToUser() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { serverId: string; user: Principal }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.assignServerToUser(params.serverId, params.user);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dedicatedServers'] });
+    },
+  });
+}
+
+export function useAssignServerToPlan() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { serverId: string; planId: string }) => {
+      if (!actor) throw new Error('Actor not available');
+      return actor.assignServerToPlan(params.serverId, params.planId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dedicatedServers'] });
     },
   });
 }

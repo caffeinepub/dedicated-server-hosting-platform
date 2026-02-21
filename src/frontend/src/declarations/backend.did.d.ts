@@ -10,6 +10,8 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export type AssignedTo = { 'plan' : string } |
+  { 'user' : Principal };
 export interface CheckResult {
   'isAnonymous' : boolean,
   'adminCount' : bigint,
@@ -23,6 +25,21 @@ export interface CustomServerConfig {
   'location' : string,
   'cpuCores' : bigint,
 }
+export interface DedicatedServer {
+  'id' : string,
+  'status' : ServerStatus,
+  'assignedTo' : [] | [AssignedTo],
+  'name' : string,
+  'createdAt' : Time,
+  'storageGb' : bigint,
+  'updatedAt' : Time,
+  'ramGb' : bigint,
+  'cpuCores' : bigint,
+}
+export type InvitationStatus = { 'found' : { 'sender' : Principal } } |
+  { 'expired' : null } |
+  { 'used' : null } |
+  { 'notFound' : null };
 export interface Invoice {
   'id' : string,
   'status' : string,
@@ -54,6 +71,9 @@ export interface ServerPlan {
   'pricePerMonth' : bigint,
   'location' : string,
 }
+export type ServerStatus = { 'assigned' : null } |
+  { 'decommissioned' : null } |
+  { 'available' : null };
 export interface ShoppingCart {
   'total' : bigint,
   'createdAt' : Time,
@@ -86,7 +106,6 @@ export interface TransformationOutput {
   'headers' : Array<http_header>,
 }
 export interface UpdatePlanInput {
-  'id' : string,
   'cpu' : string,
   'ram' : string,
   'bandwidth' : string,
@@ -122,14 +141,24 @@ export interface _SERVICE {
   'addToCart' : ActorMethod<[string], ShoppingCart>,
   'allUsers' : ActorMethod<[], Array<UserProfile>>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'assignServerToPlan' : ActorMethod<[string, string], DedicatedServer>,
+  'assignServerToUser' : ActorMethod<[string, Principal], DedicatedServer>,
   'autoAssignAdminOnLogin' : ActorMethod<[], boolean>,
   'checkAdminStatus' : ActorMethod<[], CheckResult>,
   'checkout' : ActorMethod<[string, string], string>,
   'clearCart' : ActorMethod<[], undefined>,
+  'createAdminInvitation' : ActorMethod<[], string>,
   'createCheckoutSession' : ActorMethod<
     [Array<ShoppingItem>, string, string],
     string
   >,
+  'createDedicatedServer' : ActorMethod<
+    [string, string, bigint, bigint, bigint],
+    DedicatedServer
+  >,
+  'deleteDedicatedServer' : ActorMethod<[string], undefined>,
+  'getActiveInvitations' : ActorMethod<[], Array<[string, Principal]>>,
+  'getAllDedicatedServers' : ActorMethod<[], Array<DedicatedServer>>,
   'getAllInvoices' : ActorMethod<[], Array<Invoice>>,
   'getAllOrders' : ActorMethod<[], Array<Order>>,
   'getAllUsers' : ActorMethod<[], Array<UserProfile>>,
@@ -137,6 +166,8 @@ export interface _SERVICE {
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getCart' : ActorMethod<[], ShoppingCart>,
   'getCurrentUserProfile' : ActorMethod<[], [] | [UserProfile]>,
+  'getDedicatedServer' : ActorMethod<[string], DedicatedServer>,
+  'getInvitationCodes' : ActorMethod<[], Array<string>>,
   'getPaymentStatus' : ActorMethod<[string], StripeSessionStatus>,
   'getPlanById' : ActorMethod<[string], ServerPlan>,
   'getServerPlans' : ActorMethod<[], Array<ServerPlan>>,
@@ -148,17 +179,20 @@ export interface _SERVICE {
   'hasAdmin' : ActorMethod<[], boolean>,
   'isAdminSetUp' : ActorMethod<[], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'isInvitationCodeValid' : ActorMethod<[string], boolean>,
   'isStripeConfigured' : ActorMethod<[], boolean>,
-  'promoteToAdmin' : ActorMethod<[], undefined>,
   'promoteToAdminIfNeeded' : ActorMethod<[], undefined>,
+  'redeemAdminInvitation' : ActorMethod<[string], boolean>,
   'registerUser' : ActorMethod<[string, string], UserProfile>,
   'removeFromCart' : ActorMethod<[string], ShoppingCart>,
   'removeServerPlan' : ActorMethod<[string], undefined>,
+  'resetAdminState' : ActorMethod<[], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'seedDefaultPlans' : ActorMethod<[], undefined>,
   'setStripeConfiguration' : ActorMethod<[StripeConfiguration], undefined>,
   'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
-  'updateServerPlan' : ActorMethod<[UpdatePlanInput], ServerPlan>,
+  'updateServerPlan' : ActorMethod<[string, UpdatePlanInput], ServerPlan>,
+  'verifyInvitationCode' : ActorMethod<[string], InvitationStatus>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

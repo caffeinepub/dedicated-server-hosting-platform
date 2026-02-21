@@ -1,12 +1,12 @@
 import Map "mo:core/Map";
 import Text "mo:core/Text";
-import Array "mo:core/Array";
 import Time "mo:core/Time";
 import Runtime "mo:core/Runtime";
 import Principal "mo:core/Principal";
-import Iter "mo:core/Iter";
+import Array "mo:core/Array";
 import Stripe "stripe/stripe";
 import OutCall "http-outcalls/outcall";
+import Iter "mo:core/Iter";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 
@@ -65,7 +65,6 @@ actor {
   };
 
   public type UpdatePlanInput = {
-    id : Text;
     name : Text;
     cpu : Text;
     ram : Text;
@@ -86,6 +85,29 @@ actor {
     durationMonths : Nat;
   };
 
+  public type DedicatedServer = {
+    id : Text;
+    name : Text;
+    cpuCores : Nat;
+    ramGb : Nat;
+    storageGb : Nat;
+    status : ServerStatus;
+    assignedTo : ?AssignedTo;
+    createdAt : Time.Time;
+    updatedAt : Time.Time;
+  };
+
+  public type ServerStatus = {
+    #available;
+    #assigned;
+    #decommissioned;
+  };
+
+  public type AssignedTo = {
+    #user : Principal;
+    #plan : Text; // planId
+  };
+
   public type CheckResult = {
     hasAdmin : Bool;
     adminCount : Nat;
@@ -99,6 +121,8 @@ actor {
   let invoices = Map.empty<Text, Invoice>();
   let activeCarts = Map.empty<Principal, ShoppingCart>();
   let checkoutSessions = Map.empty<Text, Principal>();
+  let adminInvitations = Map.empty<Text, Principal>();
+  let dedicatedServers = Map.empty<Text, DedicatedServer>();
 
   // Pricing constants for custom servers
   let customServerPricing = {
@@ -108,6 +132,9 @@ actor {
     baseBandwidthPrice : Nat = 50;
     priceMultiplier : Nat = 1000;
   };
+
+  // Stripe integration
+  var stripeConfig : ?Stripe.StripeConfiguration = null;
 
   // Helper functions
   func generateId(prefix : Text) : Text {
@@ -259,16 +286,16 @@ actor {
     plan;
   };
 
-  public shared ({ caller }) func updateServerPlan(update : UpdatePlanInput) : async ServerPlan {
+  public shared ({ caller }) func updateServerPlan(planId : Text, update : UpdatePlanInput) : async ServerPlan {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can update plans");
     };
 
-    switch (serverPlans.get(update.id)) {
+    switch (serverPlans.get(planId)) {
       case (null) { Runtime.trap("Plan not found") };
       case (?existing) {
         let updated : ServerPlan = {
-          id = update.id;
+          id = planId;
           name = update.name;
           cpu = update.cpu;
           ram = update.ram;
@@ -280,7 +307,7 @@ actor {
           available = update.available;
           createdAt = existing.createdAt;
         };
-        serverPlans.add(update.id, updated);
+        serverPlans.add(planId, updated);
         updated;
       };
     };
@@ -410,9 +437,6 @@ actor {
     };
     activeCarts.remove(caller);
   };
-
-  // Stripe integration
-  var stripeConfig : ?Stripe.StripeConfiguration = null;
 
   public shared ({ caller }) func setStripeConfiguration(config : Stripe.StripeConfiguration) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
@@ -602,7 +626,6 @@ actor {
     invoices.values().toArray();
   };
 
-  // Admin existence check
   public query func hasAdmin() : async Bool {
     accessControlState.adminAssigned;
   };
@@ -616,63 +639,46 @@ actor {
     };
   };
 
-  // Auto-assign admin on first authenticated login
   public shared ({ caller }) func autoAssignAdminOnLogin() : async Bool {
-    // Reject anonymous users - never assign admin to anonymous
+    if (accessControlState.adminAssigned) {
+      return false;
+    };
     if (caller == Principal.anonymous()) {
       return false;
     };
 
-    // Check if admin already exists using the adminAssigned flag
-    if (accessControlState.adminAssigned) {
-      return false;
-    };
-
-    // No admin exists yet - assign the current authenticated user as admin
+    // Attempt to assign the role to itself for the first authenticated user.
+    // The authorization check will confirm for all later attemters that this action is admin only.
     AccessControl.assignRole(
       accessControlState,
       caller,
       caller,
       #admin,
     );
-    accessControlState.adminAssigned := true;
+
+    // Validation that admin is assigned otherwise user does not know
+    if (not accessControlState.adminAssigned) {
+      Runtime.trap("Internal error: Admin assignment failed");
+    };
     true;
   };
 
   public shared ({ caller }) func promoteToAdminIfNeeded() : async () {
-    // Reject anonymous users immediately
-    if (caller == Principal.anonymous()) {
-      Runtime.trap("Unauthorized: Anonymous users cannot assume admin role");
+    switch (accessControlState.adminAssigned, caller == Principal.anonymous()) {
+      case (true, true) { Runtime.trap("Unauthorized: At least one admin already exists. Only existing authenticated admins can assign roles. Anonymous users are not allowed."); };
+      case (true, false) { Runtime.trap("Unauthorized: At least one admin already exists. Only existing authenticated admins can assign roles."); };
+      case (false, true) { Runtime.trap("Unauthorized: Anonymous users cannot assume admin role while no admin exists."); };
+      case (false, false) {};
     };
 
-    // Check if admin already exists using the adminAssigned flag
-    if (not accessControlState.adminAssigned) {
-      // Bootstrap case: no admin exists, allow first authenticated user to become admin
-      AccessControl.assignRole(
-        accessControlState,
-        caller,
-        caller,
-        #admin,
-      );
-      accessControlState.adminAssigned := true;
-    } else {
-      // Admin exists: only existing admins can assign roles (enforced by AccessControl.assignRole)
-      Runtime.trap("Unauthorized: Admin already exists. Only existing admins can assign roles.");
-    };
-  };
-
-  public shared ({ caller }) func promoteToAdmin() : async () {
-    // This will trap if caller is not already an admin (enforced by AccessControl.assignRole)
+    // Attempt to assign the role to itself for the first authenticated user.
+    // The authorization check will confirm for all later attemters that this action is admin only.
     AccessControl.assignRole(
       accessControlState,
       caller,
       caller,
       #admin,
     );
-  };
-
-  public query func isAdminSetUp() : async Bool {
-    accessControlState.adminAssigned;
   };
 
   public query ({ caller }) func allUsers() : async [UserProfile] {
@@ -680,5 +686,198 @@ actor {
       Runtime.trap("Unauthorized: Only admins can view all users");
     };
     userProfiles.values().toArray();
+  };
+
+  public query func isAdminSetUp() : async Bool {
+    accessControlState.adminAssigned;
+  };
+
+  public shared ({ caller }) func resetAdminState() : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can reset admin state");
+    };
+    accessControlState.adminAssigned := false;
+  };
+
+  public shared ({ caller }) func createAdminInvitation() : async Text {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can create invitation codes");
+    };
+    let uniqueCode = generateId("invite");
+    adminInvitations.add(uniqueCode, caller);
+    uniqueCode;
+  };
+
+  public shared ({ caller }) func redeemAdminInvitation(code : Text) : async Bool {
+    // Prevent anonymous users from redeeming invitations
+    if (caller == Principal.anonymous()) {
+      Runtime.trap("Unauthorized: Anonymous users cannot redeem invitation codes");
+    };
+
+    switch (adminInvitations.get(code)) {
+      case (null) { Runtime.trap("Invalid invitation code") };
+      case (?_inviter) {
+        AccessControl.assignRole(
+          accessControlState,
+          caller,
+          caller,
+          #admin,
+        );
+        adminInvitations.remove(code);
+        true;
+      };
+    };
+  };
+
+  public shared ({ caller }) func isInvitationCodeValid(_code : Text) : async Bool {
+    // Require authenticated user to check invitation validity
+    if (caller == Principal.anonymous()) {
+      Runtime.trap("Unauthorized: Only authenticated users can check invitation codes");
+    };
+
+    switch (adminInvitations.get(_code)) {
+      case (null) { false };
+      case (?_sender) { true };
+    };
+  };
+
+  public query ({ caller }) func getInvitationCodes() : async [Text] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can view invitation codes");
+    };
+    let codes = adminInvitations.toArray();
+    let allCodes = codes.map(func((k, _)) { k });
+    allCodes;
+  };
+
+  public query ({ caller }) func getActiveInvitations() : async [(Text, Principal)] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can view active invitations");
+    };
+    adminInvitations.toArray();
+  };
+
+  public type InvitationStatus = {
+    #found : { sender : Principal };
+    #expired;
+    #notFound;
+    #used;
+  };
+
+  public query ({ caller }) func verifyInvitationCode(code : Text) : async InvitationStatus {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can verify invitation codes");
+    };
+
+    switch (adminInvitations.get(code)) {
+      case (null) {
+        #notFound;
+      };
+      case (?sender) {
+        #found { sender };
+      };
+    };
+  };
+
+  // Dedicated Server Management
+  public shared ({ caller }) func createDedicatedServer(
+    id : Text,
+    name : Text,
+    cpuCores : Nat,
+    ramGb : Nat,
+    storageGb : Nat
+  ) : async DedicatedServer {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can create servers");
+    };
+
+    let server : DedicatedServer = {
+      id;
+      name;
+      cpuCores;
+      ramGb;
+      storageGb;
+      status = #available;
+      assignedTo = null;
+      createdAt = Time.now();
+      updatedAt = Time.now();
+    };
+    dedicatedServers.add(id, server);
+    server;
+  };
+
+  public shared ({ caller }) func deleteDedicatedServer(serverId : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can delete servers");
+    };
+    if (not (dedicatedServers.containsKey(serverId))) {
+      Runtime.trap("Server not found");
+    };
+    dedicatedServers.remove(serverId);
+  };
+
+  public query ({ caller }) func getDedicatedServer(serverId : Text) : async DedicatedServer {
+    switch (dedicatedServers.get(serverId)) {
+      case (null) { Runtime.trap("Server not found") };
+      case (?server) {
+        // Allow access if: admin OR user owns the server
+        let isOwner = switch (server.assignedTo) {
+          case (null) { false };
+          case (?#user(user)) { user == caller };
+          case (?#plan(_)) { false };
+        };
+        if (not (AccessControl.isAdmin(accessControlState, caller) or isOwner)) {
+          Runtime.trap("Unauthorized: Can only view your own servers or admin access required");
+        };
+        server;
+      };
+    };
+  };
+
+  public query ({ caller }) func getAllDedicatedServers() : async [DedicatedServer] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can view all servers");
+    };
+    dedicatedServers.values().toArray();
+  };
+
+  public shared ({ caller }) func assignServerToUser(serverId : Text, user : Principal) : async DedicatedServer {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can assign servers");
+    };
+
+    switch (dedicatedServers.get(serverId)) {
+      case (null) { Runtime.trap("Server not found") };
+      case (?server) {
+        if (server.status != #available) {
+          Runtime.trap("Server is not available for assignment");
+        };
+        let updated : DedicatedServer = {
+          server with assignedTo = ?#user user; status = #assigned; updatedAt = Time.now()
+        };
+        dedicatedServers.add(serverId, updated);
+        updated;
+      };
+    };
+  };
+
+  public shared ({ caller }) func assignServerToPlan(serverId : Text, planId : Text) : async DedicatedServer {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can assign servers");
+    };
+
+    switch (dedicatedServers.get(serverId)) {
+      case (null) { Runtime.trap("Server not found") };
+      case (?server) {
+        if (server.status != #available) {
+          Runtime.trap("Server is not available for assignment");
+        };
+        let updated : DedicatedServer = {
+          server with assignedTo = ?#plan planId; status = #assigned; updatedAt = Time.now()
+        };
+        dedicatedServers.add(serverId, updated);
+        updated;
+      };
+    };
   };
 };

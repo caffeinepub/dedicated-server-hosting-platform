@@ -9,6 +9,7 @@ import {
   useGetAllOrders,
   useGetAllUsers,
   useIsStripeConfigured,
+  useGetAllDedicatedServers,
 } from '../hooks/useQueries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,10 +21,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Edit, Trash2, Server, Users, Package, Settings } from 'lucide-react';
-import type { ServerPlan } from '../backend';
+import { Plus, Edit, Trash2, Server, Users, Package, Settings, UserPlus, HardDrive } from 'lucide-react';
+import type { ServerPlan, DedicatedServer } from '../backend';
 import StripeSetupModal from '../components/StripeSetupModal';
+import AdminInvitationManager from '../components/AdminInvitationManager';
+import CreateServerDialog from '../components/CreateServerDialog';
+import AssignServerDialog from '../components/AssignServerDialog';
+import DeleteServerDialog from '../components/DeleteServerDialog';
 
 export default function AdminPage() {
   const { identity, login } = useInternetIdentity();
@@ -31,6 +37,7 @@ export default function AdminPage() {
   const { data: plans, isLoading: plansLoading } = useGetServerPlans();
   const { data: orders, isLoading: ordersLoading } = useGetAllOrders();
   const { data: users, isLoading: usersLoading } = useGetAllUsers();
+  const { data: servers, isLoading: serversLoading } = useGetAllDedicatedServers();
   const { data: stripeConfigured } = useIsStripeConfigured();
   const addPlan = useAddServerPlan();
   const updatePlan = useUpdateServerPlan();
@@ -39,6 +46,9 @@ export default function AdminPage() {
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<ServerPlan | null>(null);
   const [stripeDialogOpen, setStripeDialogOpen] = useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedServer, setSelectedServer] = useState<DedicatedServer | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -50,6 +60,7 @@ export default function AdminPage() {
     pricePerMonth: '',
     currency: 'usd',
     available: true,
+    billingPeriod: 'monthly',
   });
 
   useEffect(() => {
@@ -64,6 +75,7 @@ export default function AdminPage() {
         pricePerMonth: (Number(editingPlan.pricePerMonth) / 100).toString(),
         currency: editingPlan.currency,
         available: editingPlan.available,
+        billingPeriod: 'monthly',
       });
       setPlanDialogOpen(true);
     }
@@ -146,6 +158,7 @@ export default function AdminPage() {
         pricePerMonth: '',
         currency: 'usd',
         available: true,
+        billingPeriod: 'monthly',
       });
     } catch (error: any) {
       toast.error(error.message || 'Failed to save server plan');
@@ -176,13 +189,41 @@ export default function AdminPage() {
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  const getServerStatusBadge = (status: string) => {
+    switch (status) {
+      case 'available':
+        return <Badge variant="default">Available</Badge>;
+      case 'assigned':
+        return <Badge variant="secondary">Assigned</Badge>;
+      case 'decommissioned':
+        return <Badge variant="outline">Decommissioned</Badge>;
+      default:
+        return <Badge>{status}</Badge>;
+    }
+  };
+
+  const getAssignmentInfo = (server: DedicatedServer) => {
+    if (!server.assignedTo) return 'Unassigned';
+    if ('user' in server.assignedTo) {
+      const userPrincipal = server.assignedTo.user.toString();
+      const user = users?.find(u => u.principal.toString() === userPrincipal);
+      return user ? `User: ${user.name}` : `User: ${userPrincipal.slice(0, 8)}...`;
+    }
+    if ('plan' in server.assignedTo) {
+      const planId = server.assignedTo.plan;
+      const plan = plans?.find(p => p.id === planId);
+      return plan ? `Plan: ${plan.name}` : `Plan: ${planId}`;
+    }
+    return 'Unknown';
+  };
+
   return (
     <div className="container py-12">
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold tracking-tighter">Admin Panel</h1>
-            <p className="text-muted-foreground mt-2">Manage server plans, orders, and users.</p>
+            <p className="text-muted-foreground mt-2">Manage servers, plans, orders, and users.</p>
           </div>
           <Button onClick={() => setStripeDialogOpen(true)} variant="outline">
             <Settings className="mr-2 h-4 w-4" />
@@ -190,8 +231,12 @@ export default function AdminPage() {
           </Button>
         </div>
 
-        <Tabs defaultValue="plans" className="space-y-6">
+        <Tabs defaultValue="servers" className="space-y-6">
           <TabsList>
+            <TabsTrigger value="servers">
+              <HardDrive className="mr-2 h-4 w-4" />
+              Dedicated Servers
+            </TabsTrigger>
             <TabsTrigger value="plans">
               <Server className="mr-2 h-4 w-4" />
               Server Plans
@@ -204,7 +249,92 @@ export default function AdminPage() {
               <Users className="mr-2 h-4 w-4" />
               Users
             </TabsTrigger>
+            <TabsTrigger value="invitations">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Admin Invitations
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="servers" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Dedicated Servers</CardTitle>
+                    <CardDescription>Manage your physical server infrastructure.</CardDescription>
+                  </div>
+                  <CreateServerDialog />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {serversLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                  </div>
+                ) : servers && servers.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Specs</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Assignment</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {servers.map((server) => (
+                        <TableRow key={server.id}>
+                          <TableCell className="font-mono text-sm">{server.id}</TableCell>
+                          <TableCell className="font-medium">{server.name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {Number(server.cpuCores)} cores • {Number(server.ramGb)}GB RAM • {Number(server.storageGb)}GB
+                          </TableCell>
+                          <TableCell>{getServerStatusBadge(server.status)}</TableCell>
+                          <TableCell className="text-sm">{getAssignmentInfo(server)}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate(server.createdAt)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedServer(server);
+                                  setAssignDialogOpen(true);
+                                }}
+                              >
+                                Assign
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedServer(server);
+                                  setDeleteDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    No dedicated servers yet. Create your first server to get started.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="plans" className="space-y-6">
             <Card>
@@ -228,6 +358,7 @@ export default function AdminPage() {
                         pricePerMonth: '',
                         currency: 'usd',
                         available: true,
+                        billingPeriod: 'monthly',
                       });
                     }
                   }}>
@@ -309,9 +440,9 @@ export default function AdminPage() {
                             />
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-3 gap-4">
                           <div className="space-y-2">
-                            <Label htmlFor="price">Price per Month ($)</Label>
+                            <Label htmlFor="price">Price ($)</Label>
                             <Input
                               id="price"
                               type="number"
@@ -331,6 +462,19 @@ export default function AdminPage() {
                               placeholder="e.g., usd"
                               required
                             />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="billingPeriod">Billing Period</Label>
+                            <Select value={formData.billingPeriod} onValueChange={(value) => setFormData({ ...formData, billingPeriod: value })}>
+                              <SelectTrigger id="billingPeriod">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="monthly">Monthly</SelectItem>
+                                <SelectItem value="quarterly">Quarterly</SelectItem>
+                                <SelectItem value="annually">Annually</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -443,9 +587,9 @@ export default function AdminPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Order ID</TableHead>
-                        <TableHead>Server Plan</TableHead>
                         <TableHead>Customer</TableHead>
-                        <TableHead>Price</TableHead>
+                        <TableHead>Plan</TableHead>
+                        <TableHead>Amount</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Date</TableHead>
                       </TableRow>
@@ -453,14 +597,18 @@ export default function AdminPage() {
                     <TableBody>
                       {orders.map((order) => (
                         <TableRow key={order.id}>
-                          <TableCell className="font-mono text-xs">{order.id}</TableCell>
+                          <TableCell className="font-mono text-sm">{order.id}</TableCell>
+                          <TableCell className="text-sm">{order.user.toString().slice(0, 12)}...</TableCell>
                           <TableCell>{order.serverPlan.name}</TableCell>
-                          <TableCell className="font-mono text-xs">{order.user.toString().slice(0, 10)}...</TableCell>
                           <TableCell>{formatPrice(order.price, order.currency)}</TableCell>
                           <TableCell>
-                            <Badge>{order.status}</Badge>
+                            <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
+                              {order.status}
+                            </Badge>
                           </TableCell>
-                          <TableCell>{formatDate(order.createdAt)}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate(order.createdAt)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -502,8 +650,12 @@ export default function AdminPage() {
                         <TableRow key={user.principal.toString()}>
                           <TableCell className="font-medium">{user.name}</TableCell>
                           <TableCell>{user.email}</TableCell>
-                          <TableCell className="font-mono text-xs">{user.principal.toString().slice(0, 20)}...</TableCell>
-                          <TableCell>{formatDate(user.createdAt)}</TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {user.principal.toString().slice(0, 20)}...
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate(user.createdAt)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -516,10 +668,40 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="invitations" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Admin Invitations</CardTitle>
+                <CardDescription>Generate and manage admin invitation codes.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AdminInvitationManager />
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
       <StripeSetupModal open={stripeDialogOpen} onOpenChange={setStripeDialogOpen} />
+      
+      {selectedServer && (
+        <>
+          <AssignServerDialog
+            serverId={selectedServer.id}
+            serverName={selectedServer.name}
+            open={assignDialogOpen}
+            onOpenChange={setAssignDialogOpen}
+          />
+          <DeleteServerDialog
+            serverId={selectedServer.id}
+            serverName={selectedServer.name}
+            isAssigned={!!selectedServer.assignedTo}
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+          />
+        </>
+      )}
     </div>
   );
 }

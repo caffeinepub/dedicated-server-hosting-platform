@@ -1,54 +1,206 @@
 {
   "kind": "build_request",
-  "title": "Fix infinite loop in admin setup error handling",
-  "projectName": "ServerHost",
+  "title": "Fix first admin authentication and build complete admin dashboard with server and plan management",
+  "projectName": "ServerHost Admin",
   "priority": "high",
   "requirements": [
     {
       "id": "REQ-1",
-      "text": "Fix the infinite loop occurring in AdminSetupNotice component where the 'An admin already exists' error continuously refreshes the page, preventing users from accessing the application",
-      "target": "frontend",
+      "text": "Fix the first admin authentication logic so that the first user to sign in with Internet Identity is automatically recognized and granted admin status without requiring an invitation code",
+      "target": "backend",
       "source": {
         "messageIds": [
-          "msg-latest"
+          "msg-1",
+          "msg-3",
+          "msg-5",
+          "msg-7"
         ],
         "quotes": [
-          "It's also looping"
+          "Yes please fix the authentication logic so you're properly recognized as the first admin",
+          "Accepted as main admin"
         ]
       },
       "acceptanceCriteria": [
-        "The admin setup error no longer triggers an automatic page refresh loop",
-        "Users can see the error message without the page continuously reloading",
-        "The application remains accessible even when admin setup encounters an error",
-        "Error state is handled gracefully with a manual retry option instead of automatic refresh"
+        "First authenticated user is automatically granted admin privileges",
+        "Admin status persists across sessions",
+        "No invitation code required for first admin",
+        "Subsequent users require invitation codes to become admins"
       ]
     },
     {
       "id": "REQ-2",
-      "text": "Investigate and resolve the root cause of the 'An admin already exists' error being thrown incorrectly when no admin is actually assigned in the backend",
-      "target": "backend",
+      "text": "Create an admin dashboard page that displays comprehensive lists of all dedicated servers with their current status, specifications, and assignment information",
+      "target": "frontend",
       "source": {
         "messageIds": [
-          "msg-latest"
+          "msg-3",
+          "msg-5",
+          "msg-9"
+        ],
+        "quotes": [
+          "Dashboard should display a list of servers and plans with management capabilities",
+          "Full dashboard with the dedicated servers and plan etc"
         ]
       },
       "acceptanceCriteria": [
-        "Backend correctly identifies when no admin exists in the system",
-        "Admin assignment succeeds for the first authenticated user on fresh deployments",
-        "The hasAdminBeenAssigned flag accurately reflects the actual admin assignment state",
-        "No false positive 'admin already exists' errors occur during initial setup"
+        "Dashboard shows all servers in a table or card layout",
+        "Each server displays status (active, inactive, pending)",
+        "Server specs are visible (CPU, RAM, storage)",
+        "Assignment information shows which user or plan owns each server",
+        "Dashboard is only accessible to admin users"
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "text": "Implement server creation functionality allowing admins to create new dedicated servers by specifying name, specifications (CPU cores, RAM GB, storage GB), and initial status",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-3",
+          "msg-5"
+        ],
+        "quotes": [
+          "Server management needs create, assign, delete, and view status functions",
+          "Create, assign, delete, view status"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Admin can access a 'Create Server' form or dialog",
+        "Form includes fields for server name, CPU cores, RAM amount, storage capacity",
+        "Server is created with 'available' status by default",
+        "New server appears in the dashboard list immediately after creation",
+        "Backend persists the new server data"
+      ]
+    },
+    {
+      "id": "REQ-4",
+      "text": "Implement server assignment functionality allowing admins to assign servers to specific user accounts or to subscription plans, with the flexibility to choose either assignment type based on customer needs",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-5",
+          "msg-7"
+        ],
+        "quotes": [
+          "For server assignment - should admins assign servers to specific user accounts, or to purchased plans/subscriptions?",
+          "Yes to both depending on the required for the customer"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Admin can select a server and choose to assign it to a user or a plan",
+        "Dropdown or search interface to select target user by name/email",
+        "Dropdown or search interface to select target plan",
+        "Assigned servers show their assignment in the dashboard",
+        "Backend tracks assignment type (user or plan) and target ID",
+        "Servers can be reassigned or unassigned"
+      ]
+    },
+    {
+      "id": "REQ-5",
+      "text": "Implement server deletion functionality allowing admins to permanently remove servers from the system with confirmation to prevent accidental deletion",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-3",
+          "msg-5"
+        ],
+        "quotes": [
+          "Create, assign, delete, view status"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Delete button or action available for each server in the dashboard",
+        "Confirmation dialog appears before deletion",
+        "Deletion removes server from backend storage",
+        "Deleted server disappears from dashboard immediately",
+        "Cannot delete servers that are currently assigned (or requires force delete confirmation)"
+      ]
+    },
+    {
+      "id": "REQ-6",
+      "text": "Create a subscription plans management interface displaying all plans with their pricing, specifications, and billing periods, accessible from the admin dashboard",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-3",
+          "msg-5",
+          "msg-7"
+        ],
+        "quotes": [
+          "Displays a list of servers, plans, away to manage them",
+          "For Plans management - what information should each plan include?"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Plans are displayed in a table or card layout in the admin dashboard",
+        "Each plan shows name, price, CPU/RAM/storage specs, and billing period",
+        "Plans section is organized separately from servers section",
+        "Admin can view all active and inactive plans"
+      ]
+    },
+    {
+      "id": "REQ-7",
+      "text": "Implement plan creation and editing functionality allowing admins to define subscription plans with name, price, server specifications (CPU cores, RAM GB, storage GB), and billing period (monthly, quarterly, annually)",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-5",
+          "msg-7"
+        ],
+        "quotes": [
+          "what information should each plan include? (e.g., name, price, server specs like CPU/RAM/storage, billing period?)",
+          "Yes"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Admin can create new plans via a form or dialog",
+        "Form includes fields for plan name, price amount, CPU cores, RAM GB, storage GB",
+        "Billing period selector with options: Monthly, Quarterly, Annually",
+        "Admin can edit existing plans",
+        "Changes to plans are reflected in the frontend Plans page for customers",
+        "Backend persists plan data"
+      ]
+    },
+    {
+      "id": "REQ-8",
+      "text": "Integrate Stripe API for payment processing, allowing admins to configure Stripe secret key and for users to purchase subscription plans through Stripe checkout",
+      "target": "both",
+      "source": {
+        "messageIds": [
+          "msg-3",
+          "msg-5",
+          "msg-7"
+        ],
+        "quotes": [
+          "Stripe APIS",
+          "For Stripe integration - should admins create/manage subscription plans that users can purchase?",
+          "Yes"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Stripe secret key configuration interface accessible to admins (already exists in StripeSetupModal)",
+        "Users can select a plan and initiate checkout",
+        "Checkout redirects to Stripe for payment processing",
+        "Successful payments create orders/subscriptions in the backend",
+        "Payment success and failure pages handle redirect flows",
+        "Backend validates Stripe webhook signatures for security"
       ]
     }
   ],
   "constraints": [
-    "Must preserve existing AdminSetupNotice component structure and user experience",
-    "Cannot break existing admin role verification logic",
-    "Must maintain compatibility with Internet Identity authentication flow"
+    "Preserve the existing authorization mixin pattern in backend/main.mo for access control",
+    "Do not modify frontend/src/hooks/useInternetIdentity.ts or frontend/src/hooks/useActor.ts",
+    "Use the existing ProfileSetupModal and AdminSetupNotice components without breaking their current functionality",
+    "Maintain compatibility with the existing shopping cart, orders, and invoices system",
+    "All admin features must be protected by proper access control checks"
   ],
   "nonGoals": [
-    "Redesigning the admin setup UI beyond fixing the loop",
-    "Adding multi-admin support or admin management features",
-    "Modifying the overall authentication system"
+    "Real-time server monitoring or live status updates",
+    "Automated server provisioning or integration with cloud providers",
+    "Customer support chat or ticketing system",
+    "Email notifications for payment or server events",
+    "Multi-currency support beyond what Stripe provides",
+    "Custom authentication beyond Internet Identity"
   ],
   "imageRequirements": {
     "required": [],

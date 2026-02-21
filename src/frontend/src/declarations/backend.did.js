@@ -47,6 +47,26 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const ServerStatus = IDL.Variant({
+  'assigned' : IDL.Null,
+  'decommissioned' : IDL.Null,
+  'available' : IDL.Null,
+});
+export const AssignedTo = IDL.Variant({
+  'plan' : IDL.Text,
+  'user' : IDL.Principal,
+});
+export const DedicatedServer = IDL.Record({
+  'id' : IDL.Text,
+  'status' : ServerStatus,
+  'assignedTo' : IDL.Opt(AssignedTo),
+  'name' : IDL.Text,
+  'createdAt' : Time,
+  'storageGb' : IDL.Nat,
+  'updatedAt' : Time,
+  'ramGb' : IDL.Nat,
+  'cpuCores' : IDL.Nat,
+});
 export const CheckResult = IDL.Record({
   'isAnonymous' : IDL.Bool,
   'adminCount' : IDL.Nat,
@@ -107,7 +127,6 @@ export const TransformationOutput = IDL.Record({
   'headers' : IDL.Vec(http_header),
 });
 export const UpdatePlanInput = IDL.Record({
-  'id' : IDL.Text,
   'cpu' : IDL.Text,
   'ram' : IDL.Text,
   'bandwidth' : IDL.Text,
@@ -117,6 +136,12 @@ export const UpdatePlanInput = IDL.Record({
   'currency' : IDL.Text,
   'pricePerMonth' : IDL.Nat,
   'location' : IDL.Text,
+});
+export const InvitationStatus = IDL.Variant({
+  'found' : IDL.Record({ 'sender' : IDL.Principal }),
+  'expired' : IDL.Null,
+  'used' : IDL.Null,
+  'notFound' : IDL.Null,
 });
 
 export const idlService = IDL.Service({
@@ -140,14 +165,37 @@ export const idlService = IDL.Service({
   'addToCart' : IDL.Func([IDL.Text], [ShoppingCart], []),
   'allUsers' : IDL.Func([], [IDL.Vec(UserProfile)], ['query']),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'assignServerToPlan' : IDL.Func([IDL.Text, IDL.Text], [DedicatedServer], []),
+  'assignServerToUser' : IDL.Func(
+      [IDL.Text, IDL.Principal],
+      [DedicatedServer],
+      [],
+    ),
   'autoAssignAdminOnLogin' : IDL.Func([], [IDL.Bool], []),
   'checkAdminStatus' : IDL.Func([], [CheckResult], ['query']),
   'checkout' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
   'clearCart' : IDL.Func([], [], []),
+  'createAdminInvitation' : IDL.Func([], [IDL.Text], []),
   'createCheckoutSession' : IDL.Func(
       [IDL.Vec(ShoppingItem), IDL.Text, IDL.Text],
       [IDL.Text],
       [],
+    ),
+  'createDedicatedServer' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Nat, IDL.Nat, IDL.Nat],
+      [DedicatedServer],
+      [],
+    ),
+  'deleteDedicatedServer' : IDL.Func([IDL.Text], [], []),
+  'getActiveInvitations' : IDL.Func(
+      [],
+      [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Principal))],
+      ['query'],
+    ),
+  'getAllDedicatedServers' : IDL.Func(
+      [],
+      [IDL.Vec(DedicatedServer)],
+      ['query'],
     ),
   'getAllInvoices' : IDL.Func([], [IDL.Vec(Invoice)], ['query']),
   'getAllOrders' : IDL.Func([], [IDL.Vec(Order)], ['query']),
@@ -156,6 +204,8 @@ export const idlService = IDL.Service({
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getCart' : IDL.Func([], [ShoppingCart], ['query']),
   'getCurrentUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+  'getDedicatedServer' : IDL.Func([IDL.Text], [DedicatedServer], ['query']),
+  'getInvitationCodes' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
   'getPaymentStatus' : IDL.Func([IDL.Text], [StripeSessionStatus], []),
   'getPlanById' : IDL.Func([IDL.Text], [ServerPlan], ['query']),
   'getServerPlans' : IDL.Func([], [IDL.Vec(ServerPlan)], ['query']),
@@ -171,12 +221,14 @@ export const idlService = IDL.Service({
   'hasAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'isAdminSetUp' : IDL.Func([], [IDL.Bool], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'isInvitationCodeValid' : IDL.Func([IDL.Text], [IDL.Bool], []),
   'isStripeConfigured' : IDL.Func([], [IDL.Bool], ['query']),
-  'promoteToAdmin' : IDL.Func([], [], []),
   'promoteToAdminIfNeeded' : IDL.Func([], [], []),
+  'redeemAdminInvitation' : IDL.Func([IDL.Text], [IDL.Bool], []),
   'registerUser' : IDL.Func([IDL.Text, IDL.Text], [UserProfile], []),
   'removeFromCart' : IDL.Func([IDL.Text], [ShoppingCart], []),
   'removeServerPlan' : IDL.Func([IDL.Text], [], []),
+  'resetAdminState' : IDL.Func([], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'seedDefaultPlans' : IDL.Func([], [], []),
   'setStripeConfiguration' : IDL.Func([StripeConfiguration], [], []),
@@ -185,7 +237,8 @@ export const idlService = IDL.Service({
       [TransformationOutput],
       ['query'],
     ),
-  'updateServerPlan' : IDL.Func([UpdatePlanInput], [ServerPlan], []),
+  'updateServerPlan' : IDL.Func([IDL.Text, UpdatePlanInput], [ServerPlan], []),
+  'verifyInvitationCode' : IDL.Func([IDL.Text], [InvitationStatus], ['query']),
 });
 
 export const idlInitArgs = [];
@@ -229,6 +282,23 @@ export const idlFactory = ({ IDL }) => {
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
+  });
+  const ServerStatus = IDL.Variant({
+    'assigned' : IDL.Null,
+    'decommissioned' : IDL.Null,
+    'available' : IDL.Null,
+  });
+  const AssignedTo = IDL.Variant({ 'plan' : IDL.Text, 'user' : IDL.Principal });
+  const DedicatedServer = IDL.Record({
+    'id' : IDL.Text,
+    'status' : ServerStatus,
+    'assignedTo' : IDL.Opt(AssignedTo),
+    'name' : IDL.Text,
+    'createdAt' : Time,
+    'storageGb' : IDL.Nat,
+    'updatedAt' : Time,
+    'ramGb' : IDL.Nat,
+    'cpuCores' : IDL.Nat,
   });
   const CheckResult = IDL.Record({
     'isAnonymous' : IDL.Bool,
@@ -287,7 +357,6 @@ export const idlFactory = ({ IDL }) => {
     'headers' : IDL.Vec(http_header),
   });
   const UpdatePlanInput = IDL.Record({
-    'id' : IDL.Text,
     'cpu' : IDL.Text,
     'ram' : IDL.Text,
     'bandwidth' : IDL.Text,
@@ -297,6 +366,12 @@ export const idlFactory = ({ IDL }) => {
     'currency' : IDL.Text,
     'pricePerMonth' : IDL.Nat,
     'location' : IDL.Text,
+  });
+  const InvitationStatus = IDL.Variant({
+    'found' : IDL.Record({ 'sender' : IDL.Principal }),
+    'expired' : IDL.Null,
+    'used' : IDL.Null,
+    'notFound' : IDL.Null,
   });
   
   return IDL.Service({
@@ -324,14 +399,41 @@ export const idlFactory = ({ IDL }) => {
     'addToCart' : IDL.Func([IDL.Text], [ShoppingCart], []),
     'allUsers' : IDL.Func([], [IDL.Vec(UserProfile)], ['query']),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'assignServerToPlan' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [DedicatedServer],
+        [],
+      ),
+    'assignServerToUser' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [DedicatedServer],
+        [],
+      ),
     'autoAssignAdminOnLogin' : IDL.Func([], [IDL.Bool], []),
     'checkAdminStatus' : IDL.Func([], [CheckResult], ['query']),
     'checkout' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
     'clearCart' : IDL.Func([], [], []),
+    'createAdminInvitation' : IDL.Func([], [IDL.Text], []),
     'createCheckoutSession' : IDL.Func(
         [IDL.Vec(ShoppingItem), IDL.Text, IDL.Text],
         [IDL.Text],
         [],
+      ),
+    'createDedicatedServer' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat, IDL.Nat, IDL.Nat],
+        [DedicatedServer],
+        [],
+      ),
+    'deleteDedicatedServer' : IDL.Func([IDL.Text], [], []),
+    'getActiveInvitations' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Principal))],
+        ['query'],
+      ),
+    'getAllDedicatedServers' : IDL.Func(
+        [],
+        [IDL.Vec(DedicatedServer)],
+        ['query'],
       ),
     'getAllInvoices' : IDL.Func([], [IDL.Vec(Invoice)], ['query']),
     'getAllOrders' : IDL.Func([], [IDL.Vec(Order)], ['query']),
@@ -340,6 +442,8 @@ export const idlFactory = ({ IDL }) => {
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getCart' : IDL.Func([], [ShoppingCart], ['query']),
     'getCurrentUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+    'getDedicatedServer' : IDL.Func([IDL.Text], [DedicatedServer], ['query']),
+    'getInvitationCodes' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
     'getPaymentStatus' : IDL.Func([IDL.Text], [StripeSessionStatus], []),
     'getPlanById' : IDL.Func([IDL.Text], [ServerPlan], ['query']),
     'getServerPlans' : IDL.Func([], [IDL.Vec(ServerPlan)], ['query']),
@@ -363,12 +467,14 @@ export const idlFactory = ({ IDL }) => {
     'hasAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'isAdminSetUp' : IDL.Func([], [IDL.Bool], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'isInvitationCodeValid' : IDL.Func([IDL.Text], [IDL.Bool], []),
     'isStripeConfigured' : IDL.Func([], [IDL.Bool], ['query']),
-    'promoteToAdmin' : IDL.Func([], [], []),
     'promoteToAdminIfNeeded' : IDL.Func([], [], []),
+    'redeemAdminInvitation' : IDL.Func([IDL.Text], [IDL.Bool], []),
     'registerUser' : IDL.Func([IDL.Text, IDL.Text], [UserProfile], []),
     'removeFromCart' : IDL.Func([IDL.Text], [ShoppingCart], []),
     'removeServerPlan' : IDL.Func([IDL.Text], [], []),
+    'resetAdminState' : IDL.Func([], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'seedDefaultPlans' : IDL.Func([], [], []),
     'setStripeConfiguration' : IDL.Func([StripeConfiguration], [], []),
@@ -377,7 +483,16 @@ export const idlFactory = ({ IDL }) => {
         [TransformationOutput],
         ['query'],
       ),
-    'updateServerPlan' : IDL.Func([UpdatePlanInput], [ServerPlan], []),
+    'updateServerPlan' : IDL.Func(
+        [IDL.Text, UpdatePlanInput],
+        [ServerPlan],
+        [],
+      ),
+    'verifyInvitationCode' : IDL.Func(
+        [IDL.Text],
+        [InvitationStatus],
+        ['query'],
+      ),
   });
 };
 

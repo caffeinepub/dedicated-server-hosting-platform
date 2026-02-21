@@ -1,5 +1,14 @@
+import { useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { useInternetIdentity } from '../hooks/useInternetIdentity';
-import { useGetCart, useRemoveFromCart, useClearCart, useCheckout, useGetUserOrders, useGetUserInvoices } from '../hooks/useQueries';
+import {
+  useGetCart,
+  useRemoveFromCart,
+  useCheckout,
+  useGetUserOrders,
+  useGetUserInvoices,
+  useIsCallerAdmin,
+} from '../hooks/useQueries';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -7,18 +16,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { ShoppingCart, Trash2, CreditCard, Package, FileText } from 'lucide-react';
-import { useNavigate } from '@tanstack/react-router';
+import { ShoppingCart, Trash2, Package, FileText, CreditCard } from 'lucide-react';
+import InvitationCodeRedemption from '../components/InvitationCodeRedemption';
 
 export default function DashboardPage() {
-  const { identity, login } = useInternetIdentity();
   const navigate = useNavigate();
+  const { identity, login } = useInternetIdentity();
   const { data: cart, isLoading: cartLoading } = useGetCart();
   const { data: orders, isLoading: ordersLoading } = useGetUserOrders();
   const { data: invoices, isLoading: invoicesLoading } = useGetUserInvoices();
+  const { data: isAdmin } = useIsCallerAdmin();
   const removeFromCart = useRemoveFromCart();
-  const clearCart = useClearCart();
   const checkout = useCheckout();
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [redemptionOpen, setRedemptionOpen] = useState(false);
 
   if (!identity) {
     return (
@@ -41,30 +52,28 @@ export default function DashboardPage() {
     }
   };
 
-  const handleClearCart = async () => {
-    try {
-      await clearCart.mutateAsync();
-      toast.success('Cart cleared');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to clear cart');
-    }
-  };
-
   const handleCheckout = async () => {
     if (!cart || cart.items.length === 0) {
       toast.error('Your cart is empty');
       return;
     }
 
+    setCheckingOut(true);
     try {
       const baseUrl = `${window.location.protocol}//${window.location.host}`;
-      const session = await checkout.mutateAsync({
-        successUrl: `${baseUrl}/payment-success`,
-        cancelUrl: `${baseUrl}/payment-failure`,
-      });
+      const successUrl = `${baseUrl}/payment-success`;
+      const cancelUrl = `${baseUrl}/payment-failure`;
+
+      const session = await checkout.mutateAsync({ successUrl, cancelUrl });
+      
+      if (!session?.url) {
+        throw new Error('Stripe session missing url');
+      }
+
       window.location.href = session.url;
     } catch (error: any) {
       toast.error(error.message || 'Failed to initiate checkout');
+      setCheckingOut(false);
     }
   };
 
@@ -86,8 +95,27 @@ export default function DashboardPage() {
       <div className="space-y-8">
         <div>
           <h1 className="text-4xl font-bold tracking-tighter">Dashboard</h1>
-          <p className="text-muted-foreground mt-2">Manage your servers, orders, and billing.</p>
+          <p className="text-muted-foreground mt-2">Manage your orders, cart, and invoices.</p>
         </div>
+
+        {!isAdmin && (
+          <Card className="border-primary/50 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Become an Admin
+              </CardTitle>
+              <CardDescription>
+                Have an admin invitation code? Redeem it here to gain admin privileges.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={() => setRedemptionOpen(true)}>
+                Redeem Admin Code
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs defaultValue="cart" className="space-y-6">
           <TabsList>
@@ -109,72 +137,72 @@ export default function DashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Shopping Cart</CardTitle>
-                <CardDescription>Review your selected server plans before checkout.</CardDescription>
+                <CardDescription>Review your items before checkout.</CardDescription>
               </CardHeader>
               <CardContent>
                 {cartLoading ? (
-                  <div className="space-y-4">
-                    <Skeleton className="h-20" />
-                    <Skeleton className="h-20" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
-                ) : !cart || cart.items.length === 0 ? (
-                  <div className="text-center py-12">
-                    <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">Your cart is empty</p>
-                    <Button className="mt-4" onClick={() => navigate({ to: '/plans' })}>
-                      Browse Plans
-                    </Button>
+                ) : cart && cart.items.length > 0 ? (
+                  <div className="space-y-6">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Plan</TableHead>
+                          <TableHead>Specs</TableHead>
+                          <TableHead>Price</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cart.items.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell className="font-medium">{item.name}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {item.cpu} • {item.ram} • {item.storage}
+                            </TableCell>
+                            <TableCell>{formatPrice(item.pricePerMonth, item.currency)}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveFromCart(item.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <div className="flex items-center justify-between pt-4 border-t">
+                      <div>
+                        <div className="text-sm text-muted-foreground">Total</div>
+                        <div className="text-2xl font-bold">
+                          {formatPrice(cart.total, cart.currency)}
+                        </div>
+                      </div>
+                      <Button size="lg" onClick={handleCheckout} disabled={checkingOut}>
+                        {checkingOut ? (
+                          'Processing...'
+                        ) : (
+                          <>
+                            <CreditCard className="mr-2 h-5 w-5" />
+                            Proceed to Checkout
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-6">
-                    <div className="space-y-4">
-                      {cart.items.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg">
-                          <div className="space-y-1">
-                            <h3 className="font-semibold">{item.name}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              {item.cpu} • {item.ram} • {item.storage}
-                            </p>
-                            <p className="text-sm font-medium">
-                              {formatPrice(item.pricePerMonth, item.currency)}/month
-                            </p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveFromCart(item.id)}
-                            disabled={removeFromCart.isPending}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="border-t pt-4 space-y-4">
-                      <div className="flex items-center justify-between text-lg font-semibold">
-                        <span>Total</span>
-                        <span>{formatPrice(cart.total, cart.currency)}/month</span>
-                      </div>
-                      <div className="flex gap-4">
-                        <Button
-                          variant="outline"
-                          onClick={handleClearCart}
-                          disabled={clearCart.isPending}
-                          className="flex-1"
-                        >
-                          Clear Cart
-                        </Button>
-                        <Button
-                          onClick={handleCheckout}
-                          disabled={checkout.isPending}
-                          className="flex-1"
-                        >
-                          <CreditCard className="mr-2 h-4 w-4" />
-                          {checkout.isPending ? 'Processing...' : 'Proceed to Checkout'}
-                        </Button>
-                      </div>
-                    </div>
+                  <div className="text-center py-12">
+                    <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground mb-4">Your cart is empty</p>
+                    <Button onClick={() => navigate({ to: '/plans' })}>
+                      Browse Server Plans
+                    </Button>
                   </div>
                 )}
               </CardContent>
@@ -185,23 +213,21 @@ export default function DashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Order History</CardTitle>
-                <CardDescription>View all your server orders and their status.</CardDescription>
+                <CardDescription>View your past orders and their status.</CardDescription>
               </CardHeader>
               <CardContent>
                 {ordersLoading ? (
-                  <Skeleton className="h-64" />
-                ) : !orders || orders.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No orders yet</p>
+                  <div className="space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
-                ) : (
+                ) : orders && orders.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Order ID</TableHead>
-                        <TableHead>Server Plan</TableHead>
-                        <TableHead>Price</TableHead>
+                        <TableHead>Plan</TableHead>
+                        <TableHead>Amount</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Date</TableHead>
                       </TableRow>
@@ -217,11 +243,17 @@ export default function DashboardPage() {
                               {order.status}
                             </Badge>
                           </TableCell>
-                          <TableCell>{formatDate(order.createdAt)}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate(order.createdAt)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    No orders yet. Start by browsing our server plans.
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -231,17 +263,15 @@ export default function DashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Invoices</CardTitle>
-                <CardDescription>View and download your billing invoices.</CardDescription>
+                <CardDescription>View and download your invoices.</CardDescription>
               </CardHeader>
               <CardContent>
                 {invoicesLoading ? (
-                  <Skeleton className="h-64" />
-                ) : !invoices || invoices.length === 0 ? (
-                  <div className="text-center py-12">
-                    <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No invoices yet</p>
+                  <div className="space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
-                ) : (
+                ) : invoices && invoices.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -263,17 +293,25 @@ export default function DashboardPage() {
                               {invoice.status}
                             </Badge>
                           </TableCell>
-                          <TableCell>{formatDate(invoice.createdAt)}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate(invoice.createdAt)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    No invoices yet.
+                  </div>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
+
+      <InvitationCodeRedemption open={redemptionOpen} onOpenChange={setRedemptionOpen} />
     </div>
   );
 }

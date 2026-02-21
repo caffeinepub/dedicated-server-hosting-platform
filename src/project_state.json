@@ -1,33 +1,124 @@
 {
   "schemaVersion": "1.0.0",
   "projectStateVersion": 3,
-  "summary": "New project",
-  "architectural_notes": [],
+  "summary": "Server hosting admin platform with complete dashboard for managing dedicated servers and subscription plans, Stripe integration for payments, and admin authentication system",
+  "architectural_notes": [
+    "Backend: Motoko on Internet Computer",
+    "Frontend: React + TypeScript with Tailwind CSS",
+    "Authentication: Internet Identity with first admin auto-assignment",
+    "Payments: Stripe API integration for subscription management",
+    "Admin panel with server and subscription plan CRUD operations",
+    "Flexible server assignment model supporting both direct user assignment and plan-based assignment"
+  ],
   "known_issues": [
-    "Login process causing infinite loop after Version 18 deployment"
+    "First admin not being recognized after sign-in (needs authentication logic fix)"
   ],
   "isFixRequest": true,
   "existing_features": [
     {
-      "id": "feature-fix-the-infinite-loop-occurring-in-adminsetupnotice-component-where-the-an-admin-already-exists-error-continuously-refreshes-the-page-preventing-users-from-accessing-the-application",
-      "title": "Fix the infinite loop occurring in AdminSetupNotice component where the 'An admin already exists' error continuously refreshes the page, preventing users from accessing the application",
+      "id": "feature-create-an-admin-dashboard-page-that-displays-comprehensive-lists-of-all-dedicated-servers-with-their-current-status-specifications-and-assignment-information",
+      "title": "Create an admin dashboard page that displays comprehensive lists of all dedicated servers with their current status, specifications, and assignment information",
       "reqIds": [
-        "REQ-1"
+        "REQ-2"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-server-creation-functionality-allowing-admins-to-create-new-dedicated-servers-by-specifying-name-specifications-cpu-cores-ram-gb-storage-gb-and-initial-status",
+      "title": "Implement server creation functionality allowing admins to create new dedicated servers by specifying name, specifications (CPU cores, RAM GB, storage GB), and initial status",
+      "reqIds": [
+        "REQ-3"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-server-assignment-functionality-allowing-admins-to-assign-servers-to-specific-user-accounts-or-to-subscription-plans-with-the-flexibility-to-choose-either-assignment-type-based-on-customer-needs",
+      "title": "Implement server assignment functionality allowing admins to assign servers to specific user accounts or to subscription plans, with the flexibility to choose either assignment type based on customer needs",
+      "reqIds": [
+        "REQ-4"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-server-deletion-functionality-allowing-admins-to-permanently-remove-servers-from-the-system-with-confirmation-to-prevent-accidental-deletion",
+      "title": "Implement server deletion functionality allowing admins to permanently remove servers from the system with confirmation to prevent accidental deletion",
+      "reqIds": [
+        "REQ-5"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-create-a-subscription-plans-management-interface-displaying-all-plans-with-their-pricing-specifications-and-billing-periods-accessible-from-the-admin-dashboard",
+      "title": "Create a subscription plans management interface displaying all plans with their pricing, specifications, and billing periods, accessible from the admin dashboard",
+      "reqIds": [
+        "REQ-6"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-implement-plan-creation-and-editing-functionality-allowing-admins-to-define-subscription-plans-with-name-price-server-specifications-cpu-cores-ram-gb-storage-gb-and-billing-period-monthly-quarterly-annually",
+      "title": "Implement plan creation and editing functionality allowing admins to define subscription plans with name, price, server specifications (CPU cores, RAM GB, storage GB), and billing period (monthly, quarterly, annually)",
+      "reqIds": [
+        "REQ-7"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-integrate-stripe-api-for-payment-processing-allowing-admins-to-configure-stripe-secret-key-and-for-users-to-purchase-subscription-plans-through-stripe-checkout",
+      "title": "Integrate Stripe API for payment processing, allowing admins to configure Stripe secret key and for users to purchase subscription plans through Stripe checkout",
+      "reqIds": [
+        "REQ-8"
       ],
       "version": 1
     }
   ],
   "new_feature_requests": [
     {
+      "id": "AR-1",
+      "summary": "Fix first admin authentication recognition on sign-in",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
       "id": "AR-2",
-      "summary": "Investigate and resolve the root cause of the 'An admin already exists' error being thrown incorrectly when no admin is actually assigned in the backend",
+      "summary": "Build admin dashboard displaying lists of servers and plans with management capabilities",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-3",
+      "summary": "Implement server management (create, assign to users, delete, view status)",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-4",
+      "summary": "Implement plan management (create plans with name, price, CPU/RAM/storage specs, billing period)",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-5",
+      "summary": "Integrate Stripe API for subscription plan purchases and payment processing",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-6",
+      "summary": "Implement flexible server assignment (to user accounts or purchased plans/subscriptions)",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-7",
+      "summary": "Fix the first admin authentication logic so that the first user to sign in with Internet Identity is automatically recognized and granted admin status without requiring an invitation code",
       "reqIds": [
-        "REQ-2"
+        "REQ-1"
       ],
       "status": "pending"
     }
   ],
-  "projectName": "ServerHost",
+  "projectName": "serverhosting.live",
   "clarification_mode": "instant",
   "clarification_rounds": 0
 }

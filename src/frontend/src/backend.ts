@@ -95,12 +95,30 @@ export interface ShoppingCart {
     currency: string;
     items: Array<ServerPlan>;
 }
+export type AssignedTo = {
+    __kind__: "plan";
+    plan: string;
+} | {
+    __kind__: "user";
+    user: Principal;
+};
 export interface TransformationOutput {
     status: bigint;
     body: Uint8Array;
     headers: Array<http_header>;
 }
 export type Time = bigint;
+export interface DedicatedServer {
+    id: string;
+    status: ServerStatus;
+    assignedTo?: AssignedTo;
+    name: string;
+    createdAt: Time;
+    storageGb: bigint;
+    updatedAt: Time;
+    ramGb: bigint;
+    cpuCores: bigint;
+}
 export interface Invoice {
     id: string;
     status: string;
@@ -137,7 +155,6 @@ export interface http_request_result {
     headers: Array<http_header>;
 }
 export interface UpdatePlanInput {
-    id: string;
     cpu: string;
     ram: string;
     bandwidth: string;
@@ -155,6 +172,21 @@ export interface ShoppingItem {
     priceInCents: bigint;
     productDescription: string;
 }
+export type InvitationStatus = {
+    __kind__: "found";
+    found: {
+        sender: Principal;
+    };
+} | {
+    __kind__: "expired";
+    expired: null;
+} | {
+    __kind__: "used";
+    used: null;
+} | {
+    __kind__: "notFound";
+    notFound: null;
+};
 export interface TransformationInput {
     context: Uint8Array;
     response: http_request_result;
@@ -199,6 +231,11 @@ export interface CheckResult {
     adminCount: bigint;
     hasAdmin: boolean;
 }
+export enum ServerStatus {
+    assigned = "assigned",
+    decommissioned = "decommissioned",
+    available = "available"
+}
 export enum UserRole {
     admin = "admin",
     user = "user",
@@ -211,11 +248,18 @@ export interface backendInterface {
     addToCart(planId: string): Promise<ShoppingCart>;
     allUsers(): Promise<Array<UserProfile>>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    assignServerToPlan(serverId: string, planId: string): Promise<DedicatedServer>;
+    assignServerToUser(serverId: string, user: Principal): Promise<DedicatedServer>;
     autoAssignAdminOnLogin(): Promise<boolean>;
     checkAdminStatus(): Promise<CheckResult>;
     checkout(successUrl: string, cancelUrl: string): Promise<string>;
     clearCart(): Promise<void>;
+    createAdminInvitation(): Promise<string>;
     createCheckoutSession(items: Array<ShoppingItem>, successUrl: string, cancelUrl: string): Promise<string>;
+    createDedicatedServer(id: string, name: string, cpuCores: bigint, ramGb: bigint, storageGb: bigint): Promise<DedicatedServer>;
+    deleteDedicatedServer(serverId: string): Promise<void>;
+    getActiveInvitations(): Promise<Array<[string, Principal]>>;
+    getAllDedicatedServers(): Promise<Array<DedicatedServer>>;
     getAllInvoices(): Promise<Array<Invoice>>;
     getAllOrders(): Promise<Array<Order>>;
     getAllUsers(): Promise<Array<UserProfile>>;
@@ -223,6 +267,8 @@ export interface backendInterface {
     getCallerUserRole(): Promise<UserRole>;
     getCart(): Promise<ShoppingCart>;
     getCurrentUserProfile(): Promise<UserProfile | null>;
+    getDedicatedServer(serverId: string): Promise<DedicatedServer>;
+    getInvitationCodes(): Promise<Array<string>>;
     getPaymentStatus(sessionId: string): Promise<StripeSessionStatus>;
     getPlanById(planId: string): Promise<ServerPlan>;
     getServerPlans(): Promise<Array<ServerPlan>>;
@@ -234,19 +280,22 @@ export interface backendInterface {
     hasAdmin(): Promise<boolean>;
     isAdminSetUp(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
+    isInvitationCodeValid(_code: string): Promise<boolean>;
     isStripeConfigured(): Promise<boolean>;
-    promoteToAdmin(): Promise<void>;
     promoteToAdminIfNeeded(): Promise<void>;
+    redeemAdminInvitation(code: string): Promise<boolean>;
     registerUser(name: string, email: string): Promise<UserProfile>;
     removeFromCart(planId: string): Promise<ShoppingCart>;
     removeServerPlan(planId: string): Promise<void>;
+    resetAdminState(): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     seedDefaultPlans(): Promise<void>;
     setStripeConfiguration(config: StripeConfiguration): Promise<void>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
-    updateServerPlan(update: UpdatePlanInput): Promise<ServerPlan>;
+    updateServerPlan(planId: string, update: UpdatePlanInput): Promise<ServerPlan>;
+    verifyInvitationCode(code: string): Promise<InvitationStatus>;
 }
-import type { StripeSessionStatus as _StripeSessionStatus, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
+import type { AssignedTo as _AssignedTo, DedicatedServer as _DedicatedServer, InvitationStatus as _InvitationStatus, ServerStatus as _ServerStatus, StripeSessionStatus as _StripeSessionStatus, Time as _Time, UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
@@ -333,6 +382,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async assignServerToPlan(arg0: string, arg1: string): Promise<DedicatedServer> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.assignServerToPlan(arg0, arg1);
+                return from_candid_DedicatedServer_n3(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.assignServerToPlan(arg0, arg1);
+            return from_candid_DedicatedServer_n3(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async assignServerToUser(arg0: string, arg1: Principal): Promise<DedicatedServer> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.assignServerToUser(arg0, arg1);
+                return from_candid_DedicatedServer_n3(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.assignServerToUser(arg0, arg1);
+            return from_candid_DedicatedServer_n3(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async autoAssignAdminOnLogin(): Promise<boolean> {
         if (this.processError) {
             try {
@@ -389,6 +466,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async createAdminInvitation(): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createAdminInvitation();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createAdminInvitation();
+            return result;
+        }
+    }
     async createCheckoutSession(arg0: Array<ShoppingItem>, arg1: string, arg2: string): Promise<string> {
         if (this.processError) {
             try {
@@ -401,6 +492,62 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.createCheckoutSession(arg0, arg1, arg2);
             return result;
+        }
+    }
+    async createDedicatedServer(arg0: string, arg1: string, arg2: bigint, arg3: bigint, arg4: bigint): Promise<DedicatedServer> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createDedicatedServer(arg0, arg1, arg2, arg3, arg4);
+                return from_candid_DedicatedServer_n3(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createDedicatedServer(arg0, arg1, arg2, arg3, arg4);
+            return from_candid_DedicatedServer_n3(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async deleteDedicatedServer(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.deleteDedicatedServer(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.deleteDedicatedServer(arg0);
+            return result;
+        }
+    }
+    async getActiveInvitations(): Promise<Array<[string, Principal]>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getActiveInvitations();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getActiveInvitations();
+            return result;
+        }
+    }
+    async getAllDedicatedServers(): Promise<Array<DedicatedServer>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAllDedicatedServers();
+                return from_candid_vec_n10(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAllDedicatedServers();
+            return from_candid_vec_n10(this._uploadFile, this._downloadFile, result);
         }
     }
     async getAllInvoices(): Promise<Array<Invoice>> {
@@ -449,28 +596,28 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserProfile();
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserProfile();
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCallerUserRole(): Promise<UserRole> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserRole();
-                return from_candid_UserRole_n4(this._uploadFile, this._downloadFile, result);
+                return from_candid_UserRole_n12(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserRole();
-            return from_candid_UserRole_n4(this._uploadFile, this._downloadFile, result);
+            return from_candid_UserRole_n12(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCart(): Promise<ShoppingCart> {
@@ -491,28 +638,56 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getCurrentUserProfile();
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCurrentUserProfile();
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getDedicatedServer(arg0: string): Promise<DedicatedServer> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getDedicatedServer(arg0);
+                return from_candid_DedicatedServer_n3(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getDedicatedServer(arg0);
+            return from_candid_DedicatedServer_n3(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getInvitationCodes(): Promise<Array<string>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getInvitationCodes();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getInvitationCodes();
+            return result;
         }
     }
     async getPaymentStatus(arg0: string): Promise<StripeSessionStatus> {
         if (this.processError) {
             try {
                 const result = await this.actor.getPaymentStatus(arg0);
-                return from_candid_StripeSessionStatus_n6(this._uploadFile, this._downloadFile, result);
+                return from_candid_StripeSessionStatus_n14(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getPaymentStatus(arg0);
-            return from_candid_StripeSessionStatus_n6(this._uploadFile, this._downloadFile, result);
+            return from_candid_StripeSessionStatus_n14(this._uploadFile, this._downloadFile, result);
         }
     }
     async getPlanById(arg0: string): Promise<ServerPlan> {
@@ -547,28 +722,28 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getStripeSessionStatus(arg0);
-                return from_candid_StripeSessionStatus_n6(this._uploadFile, this._downloadFile, result);
+                return from_candid_StripeSessionStatus_n14(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getStripeSessionStatus(arg0);
-            return from_candid_StripeSessionStatus_n6(this._uploadFile, this._downloadFile, result);
+            return from_candid_StripeSessionStatus_n14(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUserById(arg0: Principal): Promise<UserProfile | null> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserById(arg0);
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUserById(arg0);
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUserInvoices(arg0: Principal): Promise<Array<Invoice>> {
@@ -603,14 +778,14 @@ export class Backend implements backendInterface {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserProfile(arg0);
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+                return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getUserProfile(arg0);
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
+            return from_candid_opt_n11(this._uploadFile, this._downloadFile, result);
         }
     }
     async hasAdmin(): Promise<boolean> {
@@ -655,6 +830,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async isInvitationCodeValid(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isInvitationCodeValid(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isInvitationCodeValid(arg0);
+            return result;
+        }
+    }
     async isStripeConfigured(): Promise<boolean> {
         if (this.processError) {
             try {
@@ -669,20 +858,6 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async promoteToAdmin(): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.promoteToAdmin();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.promoteToAdmin();
-            return result;
-        }
-    }
     async promoteToAdminIfNeeded(): Promise<void> {
         if (this.processError) {
             try {
@@ -694,6 +869,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.promoteToAdminIfNeeded();
+            return result;
+        }
+    }
+    async redeemAdminInvitation(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.redeemAdminInvitation(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.redeemAdminInvitation(arg0);
             return result;
         }
     }
@@ -736,6 +925,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.removeServerPlan(arg0);
+            return result;
+        }
+    }
+    async resetAdminState(): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.resetAdminState();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.resetAdminState();
             return result;
         }
     }
@@ -795,34 +998,63 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async updateServerPlan(arg0: UpdatePlanInput): Promise<ServerPlan> {
+    async updateServerPlan(arg0: string, arg1: UpdatePlanInput): Promise<ServerPlan> {
         if (this.processError) {
             try {
-                const result = await this.actor.updateServerPlan(arg0);
+                const result = await this.actor.updateServerPlan(arg0, arg1);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updateServerPlan(arg0);
+            const result = await this.actor.updateServerPlan(arg0, arg1);
             return result;
         }
     }
+    async verifyInvitationCode(arg0: string): Promise<InvitationStatus> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.verifyInvitationCode(arg0);
+                return from_candid_InvitationStatus_n18(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.verifyInvitationCode(arg0);
+            return from_candid_InvitationStatus_n18(this._uploadFile, this._downloadFile, result);
+        }
+    }
 }
-function from_candid_StripeSessionStatus_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _StripeSessionStatus): StripeSessionStatus {
-    return from_candid_variant_n7(_uploadFile, _downloadFile, value);
+function from_candid_AssignedTo_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _AssignedTo): AssignedTo {
+    return from_candid_variant_n9(_uploadFile, _downloadFile, value);
 }
-function from_candid_UserRole_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
-    return from_candid_variant_n5(_uploadFile, _downloadFile, value);
+function from_candid_DedicatedServer_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _DedicatedServer): DedicatedServer {
+    return from_candid_record_n4(_uploadFile, _downloadFile, value);
 }
-function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
+function from_candid_InvitationStatus_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _InvitationStatus): InvitationStatus {
+    return from_candid_variant_n19(_uploadFile, _downloadFile, value);
+}
+function from_candid_ServerStatus_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ServerStatus): ServerStatus {
+    return from_candid_variant_n6(_uploadFile, _downloadFile, value);
+}
+function from_candid_StripeSessionStatus_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _StripeSessionStatus): StripeSessionStatus {
+    return from_candid_variant_n15(_uploadFile, _downloadFile, value);
+}
+function from_candid_UserRole_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
+    return from_candid_variant_n13(_uploadFile, _downloadFile, value);
+}
+function from_candid_opt_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
+function from_candid_opt_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_AssignedTo]): AssignedTo | null {
+    return value.length === 0 ? null : from_candid_AssignedTo_n8(_uploadFile, _downloadFile, value[0]);
+}
+function from_candid_record_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     userPrincipal: [] | [string];
     response: string;
 }): {
@@ -830,11 +1062,44 @@ function from_candid_record_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint
     response: string;
 } {
     return {
-        userPrincipal: record_opt_to_undefined(from_candid_opt_n9(_uploadFile, _downloadFile, value.userPrincipal)),
+        userPrincipal: record_opt_to_undefined(from_candid_opt_n17(_uploadFile, _downloadFile, value.userPrincipal)),
         response: value.response
     };
 }
-function from_candid_variant_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_record_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    id: string;
+    status: _ServerStatus;
+    assignedTo: [] | [_AssignedTo];
+    name: string;
+    createdAt: _Time;
+    storageGb: bigint;
+    updatedAt: _Time;
+    ramGb: bigint;
+    cpuCores: bigint;
+}): {
+    id: string;
+    status: ServerStatus;
+    assignedTo?: AssignedTo;
+    name: string;
+    createdAt: Time;
+    storageGb: bigint;
+    updatedAt: Time;
+    ramGb: bigint;
+    cpuCores: bigint;
+} {
+    return {
+        id: value.id,
+        status: from_candid_ServerStatus_n5(_uploadFile, _downloadFile, value.status),
+        assignedTo: record_opt_to_undefined(from_candid_opt_n7(_uploadFile, _downloadFile, value.assignedTo)),
+        name: value.name,
+        createdAt: value.createdAt,
+        storageGb: value.storageGb,
+        updatedAt: value.updatedAt,
+        ramGb: value.ramGb,
+        cpuCores: value.cpuCores
+    };
+}
+function from_candid_variant_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     admin: null;
 } | {
     user: null;
@@ -843,7 +1108,7 @@ function from_candid_variant_n5(_uploadFile: (file: ExternalBlob) => Promise<Uin
 }): UserRole {
     return "admin" in value ? UserRole.admin : "user" in value ? UserRole.user : "guest" in value ? UserRole.guest : value;
 }
-function from_candid_variant_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     completed: {
         userPrincipal: [] | [string];
         response: string;
@@ -866,11 +1131,81 @@ function from_candid_variant_n7(_uploadFile: (file: ExternalBlob) => Promise<Uin
 } {
     return "completed" in value ? {
         __kind__: "completed",
-        completed: from_candid_record_n8(_uploadFile, _downloadFile, value.completed)
+        completed: from_candid_record_n16(_uploadFile, _downloadFile, value.completed)
     } : "failed" in value ? {
         __kind__: "failed",
         failed: value.failed
     } : value;
+}
+function from_candid_variant_n19(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    found: {
+        sender: Principal;
+    };
+} | {
+    expired: null;
+} | {
+    used: null;
+} | {
+    notFound: null;
+}): {
+    __kind__: "found";
+    found: {
+        sender: Principal;
+    };
+} | {
+    __kind__: "expired";
+    expired: null;
+} | {
+    __kind__: "used";
+    used: null;
+} | {
+    __kind__: "notFound";
+    notFound: null;
+} {
+    return "found" in value ? {
+        __kind__: "found",
+        found: value.found
+    } : "expired" in value ? {
+        __kind__: "expired",
+        expired: value.expired
+    } : "used" in value ? {
+        __kind__: "used",
+        used: value.used
+    } : "notFound" in value ? {
+        __kind__: "notFound",
+        notFound: value.notFound
+    } : value;
+}
+function from_candid_variant_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    assigned: null;
+} | {
+    decommissioned: null;
+} | {
+    available: null;
+}): ServerStatus {
+    return "assigned" in value ? ServerStatus.assigned : "decommissioned" in value ? ServerStatus.decommissioned : "available" in value ? ServerStatus.available : value;
+}
+function from_candid_variant_n9(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    plan: string;
+} | {
+    user: Principal;
+}): {
+    __kind__: "plan";
+    plan: string;
+} | {
+    __kind__: "user";
+    user: Principal;
+} {
+    return "plan" in value ? {
+        __kind__: "plan",
+        plan: value.plan
+    } : "user" in value ? {
+        __kind__: "user",
+        user: value.user
+    } : value;
+}
+function from_candid_vec_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_DedicatedServer>): Array<DedicatedServer> {
+    return value.map((x)=>from_candid_DedicatedServer_n3(_uploadFile, _downloadFile, x));
 }
 function to_candid_UserRole_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
     return to_candid_variant_n2(_uploadFile, _downloadFile, value);

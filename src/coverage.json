@@ -1,44 +1,134 @@
 {
   "kind": "coverage_report",
   "version": "1.0",
-  "generatedAt": "2026-02-21T16:30:56.193Z",
+  "generatedAt": "2026-02-21T19:35:52.060Z",
   "sources": {
     "buildRequest": true,
     "implementationPlan": true
   },
   "requirements": {
-    "total": 2,
-    "implemented": 1,
+    "total": 8,
+    "implemented": 7,
     "items": [
       {
         "id": "REQ-1",
-        "summary": "Fix the infinite loop occurring in AdminSetupNotice component where the 'An admin already exists' error continuously refreshes the page, preventing users from accessing the application",
-        "status": "implemented",
-        "plannedFiles": [
-          "frontend/src/components/AdminSetupNotice.tsx",
-          "frontend/src/hooks/useQueries.ts"
-        ],
-        "matchedFiles": [
-          "frontend/src/components/AdminSetupNotice.tsx",
-          "frontend/src/hooks/useQueries.ts"
-        ]
-      },
-      {
-        "id": "REQ-2",
-        "summary": "Investigate and resolve the root cause of the 'An admin already exists' error being thrown incorrectly when no admin is actually assigned in the backend",
+        "summary": "Fix the first admin authentication logic so that the first user to sign in with Internet Identity is automatically recognized and granted admin status without requiring an invitation code",
         "status": "unknown",
         "plannedFiles": [],
         "matchedFiles": []
+      },
+      {
+        "id": "REQ-2",
+        "summary": "Create an admin dashboard page that displays comprehensive lists of all dedicated servers with their current status, specifications, and assignment information",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/AdminPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/AdminPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-3",
+        "summary": "Implement server creation functionality allowing admins to create new dedicated servers by specifying name, specifications (CPU cores, RAM GB, storage GB), and initial status",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/components/CreateServerDialog.tsx",
+          "frontend/src/pages/AdminPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/components/CreateServerDialog.tsx",
+          "frontend/src/pages/AdminPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-4",
+        "summary": "Implement server assignment functionality allowing admins to assign servers to specific user accounts or to subscription plans, with the flexibility to choose either assignment type based on customer needs",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/components/AssignServerDialog.tsx",
+          "frontend/src/pages/AdminPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/components/AssignServerDialog.tsx",
+          "frontend/src/pages/AdminPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-5",
+        "summary": "Implement server deletion functionality allowing admins to permanently remove servers from the system with confirmation to prevent accidental deletion",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/components/DeleteServerDialog.tsx",
+          "frontend/src/pages/AdminPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/components/DeleteServerDialog.tsx",
+          "frontend/src/pages/AdminPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-6",
+        "summary": "Create a subscription plans management interface displaying all plans with their pricing, specifications, and billing periods, accessible from the admin dashboard",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/AdminPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/AdminPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-7",
+        "summary": "Implement plan creation and editing functionality allowing admins to define subscription plans with name, price, server specifications (CPU cores, RAM GB, storage GB), and billing period (monthly, quarterly, annually)",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/AdminPage.tsx",
+          "frontend/src/pages/PlansPage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/AdminPage.tsx",
+          "frontend/src/pages/PlansPage.tsx"
+        ]
+      },
+      {
+        "id": "REQ-8",
+        "summary": "Integrate Stripe API for payment processing, allowing admins to configure Stripe secret key and for users to purchase subscription plans through Stripe checkout",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/pages/DashboardPage.tsx",
+          "frontend/src/pages/PaymentSuccessPage.tsx",
+          "frontend/src/pages/PaymentFailurePage.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/pages/DashboardPage.tsx"
+        ]
       }
     ]
   },
   "changedFiles": [
+    "backend/main.mo",
     "build-request.json",
     "feature_evidence.json",
     "frontend-file-summaries.txt",
     "frontend-implementation-plan.json",
-    "frontend/src/components/AdminSetupNotice.tsx",
+    "frontend/src/backend.d.ts",
+    "frontend/src/backend.ts",
+    "frontend/src/components/AssignServerDialog.tsx",
+    "frontend/src/components/CreateServerDialog.tsx",
+    "frontend/src/components/DeleteServerDialog.tsx",
+    "frontend/src/declarations/backend.did.d.ts",
+    "frontend/src/declarations/backend.did.js",
     "frontend/src/hooks/useQueries.ts",
+    "frontend/src/pages/AdminPage.tsx",
+    "frontend/src/pages/DashboardPage.tsx",
+    "frontend/src/pages/PlansPage.tsx",
     "project_state.json",
     "scratch/component-selection.json",
     "spec.md",

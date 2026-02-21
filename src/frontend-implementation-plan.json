@@ -1,27 +1,178 @@
 {
   "kind": "implementation_plan",
   "version": "1.0",
-  "title": "Fix infinite loop in admin setup error handling",
+  "title": "Fix first admin authentication and build complete admin dashboard with server and plan management",
   "requirements": [
     {
-      "id": "REQ-1",
-      "summary": "Fix the infinite loop in AdminSetupNotice component where 'An admin already exists' error continuously refreshes the page",
+      "id": "REQ-2",
+      "summary": "Create an admin dashboard page that displays comprehensive lists of all dedicated servers with their current status, specifications, and assignment information",
       "acceptanceCriteria": [
-        "The admin setup error no longer triggers an automatic page refresh loop",
-        "Users can see the error message without the page continuously reloading",
-        "The application remains accessible even when admin setup encounters an error",
-        "Error state is handled gracefully with a manual retry option instead of automatic refresh"
+        "Dashboard shows all servers in a table or card layout",
+        "Each server displays status (active, inactive, pending)",
+        "Server specs are visible (CPU, RAM, storage)",
+        "Assignment information shows which user or plan owns each server",
+        "Dashboard is only accessible to admin users"
       ],
       "file_operations": [
         {
-          "path": "frontend/src/components/AdminSetupNotice.tsx",
+          "path": "frontend/src/pages/AdminPage.tsx",
           "operation": "modify",
-          "description": "Remove automatic page refresh on error and replace with a manual retry mechanism. Update error handling to display the error message without triggering window.location.reload(). Add a 'Retry' button that allows users to manually retry admin setup instead of forcing an automatic refresh. Ensure error states are properly tracked to prevent re-triggering the admin setup mutation when the component re-renders."
-        },
+          "description": "Add a new 'Servers' tab to the admin page that displays all dedicated servers with status, specs, and assignment info. Use the authorization component to protect this view with admin-only access. Verify the component's usage instructions before implementing. Use getAllDedicatedServers() to fetch server data and display in a table or card layout showing id, name, cpuCores, ramGb, storageGb, status, assignedTo, createdAt, and updatedAt."
+        }
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "summary": "Implement server creation functionality allowing admins to specify name, specifications (CPU cores, RAM GB, storage GB), and initial status",
+      "acceptanceCriteria": [
+        "Admin can access a 'Create Server' form or dialog",
+        "Form includes fields for server name, CPU cores, RAM amount, storage capacity",
+        "Server is created with 'available' status by default",
+        "New server appears in the dashboard list immediately after creation",
+        "Backend persists the new server data"
+      ],
+      "file_operations": [
         {
           "path": "frontend/src/hooks/useQueries.ts",
           "operation": "modify",
-          "description": "Review the useAutoAssignAdmin and related admin setup hooks to ensure they don't automatically retry on failure. Add proper error handling configuration (retry: false) for admin setup mutations to prevent automatic retries that could contribute to the loop. Verify that the query invalidation logic doesn't trigger unnecessary refetches after errors."
+          "description": "Add a useCreateDedicatedServer mutation hook that calls actor.createDedicatedServer(id, name, cpuCores, ramGb, storageGb) and invalidates the 'dedicatedServers' query key on success to refresh the server list."
+        },
+        {
+          "path": "frontend/src/components/CreateServerDialog.tsx",
+          "operation": "create",
+          "description": "Create a dialog component with a form containing inputs for server ID, name, CPU cores (number), RAM GB (number), and storage GB (number). Use the useCreateDedicatedServer hook from useQueries.ts. Show validation errors and success toast. Use shadcn/ui Dialog and Form components. The dialog should be triggered from the admin page Servers tab."
+        },
+        {
+          "path": "frontend/src/pages/AdminPage.tsx",
+          "operation": "modify",
+          "description": "Add a 'Create Server' button to the Servers tab that opens the CreateServerDialog. Position it above the servers table/list."
+        }
+      ]
+    },
+    {
+      "id": "REQ-4",
+      "summary": "Implement server assignment functionality allowing admins to assign servers to specific user accounts or to subscription plans",
+      "acceptanceCriteria": [
+        "Admin can select a server and choose to assign it to a user or a plan",
+        "Dropdown or search interface to select target user by name/email",
+        "Dropdown or search interface to select target plan",
+        "Assigned servers show their assignment in the dashboard",
+        "Backend tracks assignment type (user or plan) and target ID",
+        "Servers can be reassigned or unassigned"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/hooks/useQueries.ts",
+          "operation": "modify",
+          "description": "Add useAssignServerToUser and useAssignServerToPlan mutation hooks that call actor.assignServerToUser(serverId, user) and actor.assignServerToPlan(serverId, planId) respectively, invalidating 'dedicatedServers' on success. Add useGetAllUsers query hook that calls actor.getAllUsers() to fetch users for selection."
+        },
+        {
+          "path": "frontend/src/components/AssignServerDialog.tsx",
+          "operation": "create",
+          "description": "Create a dialog component with radio buttons to choose assignment type (user or plan), a dropdown/combobox to select user (using useGetAllUsers) or plan (using existing useGetServerPlans), and assign/unassign buttons. Use the useAssignServerToUser and useAssignServerToPlan hooks. Accept serverId as prop. Use shadcn/ui Dialog, RadioGroup, and Select components."
+        },
+        {
+          "path": "frontend/src/pages/AdminPage.tsx",
+          "operation": "modify",
+          "description": "Add an 'Assign' action button for each server in the Servers tab that opens the AssignServerDialog with the selected serverId. Display assignment info in the server list (assignedTo field showing user principal or plan ID)."
+        }
+      ]
+    },
+    {
+      "id": "REQ-5",
+      "summary": "Implement server deletion functionality allowing admins to permanently remove servers from the system with confirmation",
+      "acceptanceCriteria": [
+        "Delete button or action available for each server in the dashboard",
+        "Confirmation dialog appears before deletion",
+        "Deletion removes server from backend storage",
+        "Deleted server disappears from dashboard immediately",
+        "Cannot delete servers that are currently assigned (or requires force delete confirmation)"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/hooks/useQueries.ts",
+          "operation": "modify",
+          "description": "Add useDeleteDedicatedServer mutation hook that calls actor.deleteDedicatedServer(serverId) and invalidates 'dedicatedServers' query key on success."
+        },
+        {
+          "path": "frontend/src/components/DeleteServerDialog.tsx",
+          "operation": "create",
+          "description": "Create a confirmation dialog component that accepts serverId and server name as props. Show warning message that deletion is permanent. If server.assignedTo is present, show additional warning about assigned server. Use useDeleteDedicatedServer hook. Use shadcn/ui AlertDialog component."
+        },
+        {
+          "path": "frontend/src/pages/AdminPage.tsx",
+          "operation": "modify",
+          "description": "Add a 'Delete' action button for each server in the Servers tab that opens the DeleteServerDialog with the selected serverId and name."
+        }
+      ]
+    },
+    {
+      "id": "REQ-6",
+      "summary": "Create a subscription plans management interface displaying all plans with their pricing, specifications, and billing periods",
+      "acceptanceCriteria": [
+        "Plans are displayed in a table or card layout in the admin dashboard",
+        "Each plan shows name, price, CPU/RAM/storage specs, and billing period",
+        "Plans section is organized separately from servers section",
+        "Admin can view all active and inactive plans"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/AdminPage.tsx",
+          "operation": "modify",
+          "description": "Enhance the existing 'Plans' tab to display all plan details including pricePerMonth, cpu, ram, storage, bandwidth, location, available status, and billing period (currently plans are monthly, note this in the UI). Ensure the layout clearly shows all plan specifications in a structured table or card grid."
+        }
+      ]
+    },
+    {
+      "id": "REQ-7",
+      "summary": "Implement plan creation and editing functionality allowing admins to define subscription plans with name, price, server specifications, and billing period",
+      "acceptanceCriteria": [
+        "Admin can create new plans via a form or dialog",
+        "Form includes fields for plan name, price amount, CPU cores, RAM GB, storage GB",
+        "Billing period selector with options: Monthly, Quarterly, Annually",
+        "Admin can edit existing plans",
+        "Changes to plans are reflected in the frontend Plans page for customers",
+        "Backend persists plan data"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/AdminPage.tsx",
+          "operation": "modify",
+          "description": "Add a billing period dropdown to the existing plan creation/edit form in the Plans tab with options: Monthly, Quarterly, Annually. Store billing period in the plan's metadata or description field since the backend currently supports monthly pricing. Update the form labels to clarify pricing is per billing period. Ensure the edit plan functionality uses updateServerPlan with all fields including the new billing period."
+        },
+        {
+          "path": "frontend/src/pages/PlansPage.tsx",
+          "operation": "modify",
+          "description": "Update the customer-facing Plans page to display the billing period for each plan if available. Show pricing as 'X per month/quarter/year' based on the plan's billing period metadata."
+        }
+      ]
+    },
+    {
+      "id": "REQ-8",
+      "summary": "Integrate Stripe API for payment processing, allowing admins to configure Stripe secret key and for users to purchase subscription plans through Stripe checkout",
+      "acceptanceCriteria": [
+        "Stripe secret key configuration interface accessible to admins (already exists in StripeSetupModal)",
+        "Users can select a plan and initiate checkout",
+        "Checkout redirects to Stripe for payment processing",
+        "Successful payments create orders/subscriptions in the backend",
+        "Payment success and failure pages handle redirect flows",
+        "Backend validates Stripe webhook signatures for security"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/pages/DashboardPage.tsx",
+          "operation": "modify",
+          "description": "Ensure the checkout flow uses the existing checkout mutation which calls actor.checkout(successUrl, cancelUrl). The checkout function already integrates with Stripe via the stripe component. Verify that the success and failure URLs point to '/payment-success' and '/payment-failure' respectively. Use the stripe component's checkout session creation which includes proper JSON parsing and URL validation. Verify the component's usage instructions before implementing."
+        },
+        {
+          "path": "frontend/src/pages/PaymentSuccessPage.tsx",
+          "operation": "modify",
+          "description": "Ensure the payment success page handles the Stripe redirect properly and displays order confirmation. The page should use URL parameters to extract sessionId if needed and call actor.getPaymentStatus(sessionId) to verify payment completion. Clear the shopping cart as already implemented."
+        },
+        {
+          "path": "frontend/src/pages/PaymentFailurePage.tsx",
+          "operation": "modify",
+          "description": "Ensure the payment failure page handles the Stripe redirect properly and provides clear error messaging. Extract error details from URL parameters if available using the urlParams utility."
         }
       ]
     }

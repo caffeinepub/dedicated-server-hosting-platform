@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Cpu, HardDrive, Network, MapPin, Check, ShoppingCart, Settings } from 'lucide-react';
+import { Cpu, HardDrive, Network, MapPin, ShoppingCart, Settings } from 'lucide-react';
 import type { ServerPlan, CustomServerConfig } from '../backend';
 
 export default function PlansPage() {
